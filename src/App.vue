@@ -151,12 +151,6 @@
         if (!pos) return;
         const pos_value = pos.toString();
 
-        if (this.visited_paths.length > ((this.distance_board.length ** 2) / 2)) {
-          this.busy = false;
-
-          throw new Error(false); // break the stack
-        }
-
         if (pos_value === end_pos_value) {
           this.found_path = true;
           this.busy = false;
