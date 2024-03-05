@@ -15,7 +15,7 @@ jobs:
     - name: Copy packege.json
       run: |
         mkdir app
-        cp -r packege.json app/
+        cp -r package.json app/
 
     - name: Install dependencies
       run: yarn install
