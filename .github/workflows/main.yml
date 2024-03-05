@@ -12,16 +12,13 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v2
 
-    - name: Copy packege.json
+    - name: Copy package.json
       run: |
         mkdir app
         cp -r package.json app/
     
     - name: Install dependencies
       run: yarn install
-
-    - name: Copy app
-      run: cp -r * .
 
     - name: Build
       run: yarn build
