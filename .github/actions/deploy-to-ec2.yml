@@ -1,0 +1,15 @@
+name: 'Deploy ec2'
+description: 'Deploy the app to aws'
+inputs:
+  host:
+    description: 'ec2 host'
+    required: true
+  username:
+    description: 'ec2 username'
+    required: true
+  ssh-key: 
+    description: 'ec2 ssh key'
+    required: true
+
+outputs:
+

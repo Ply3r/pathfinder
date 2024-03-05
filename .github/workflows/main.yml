@@ -1,0 +1,22 @@
+name: Deploy
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+
+    # - name: Deploy to EC2
+    #   uses: ./.github/actions/deploy-to-ec2
+    #   with:
+    #     host: ${{ secrets.EC2_HOST }}
+    #     username: ${{ secrets.EC2_USERNAME }}
+    #     ssh-key: ${{ secrets.EC2_SSH_KEY }}
+    #     source-dir: '/path/to/source'
+    #     destination-dir: '/path/to/destination'
