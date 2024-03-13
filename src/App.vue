@@ -2,6 +2,7 @@
   export default {
     data() {
       return {
+        touch_active: false,
         mouse_active: false,
         busy: false,
         found_path: false,
@@ -19,16 +20,47 @@
     mounted() {
       this.makeMaze();
       this.setMouseEvents();
+      this.setTouchEvents();
     },
     methods: {
+      setTouchEvents() {
+        window.addEventListener('touchstart', () => {
+          this.touch_active = true;
+        })
+
+        window.addEventListener('touchmove', this.capturePointerMoviment)
+
+        window.addEventListener('touchend', () => {
+          this.touch_active = false;
+        })
+
+        window.addEventListener('touchcancel', () => {
+          this.touch_active = false;
+        })
+      },
       setMouseEvents() {
         window.addEventListener('mousedown', () => {
           this.mouse_active = true;
         })
 
+        window.addEventListener('mousemove', this.capturePointerMoviment)
+
+
         window.addEventListener('mouseup', () => {
           this.mouse_active = false;
         })
+      },
+      capturePointerMoviment(event) {
+        const position = event.type == 'mousemove' ? event : event.touches.item(0) || event.changedTouches.item(0);
+        const element = this.getElementFromPosition(position.pageX, position.pageY);
+        
+        if(element.className != 'tile') return;
+
+        const [column, row] = element.id.split('_');
+        this.draw(row, column);
+      },
+      getElementFromPosition(x, y) {
+        return document.elementFromPoint(x, y);
       },
       makeMaze() {
         const maze = new Array(this.maze_size).fill(new Array(this.maze_size).fill(Infinity));
@@ -48,7 +80,7 @@
         this.distance_board = this.distance_board.map((row) => row.map((col) => col !== null ? Infinity : col))
       },
       draw(r_index, c_index) {
-        if (!this.mouse_active) return;
+        if (!this.mouse_active && !this.touch_active) return;
 
         if(this.pencil_type === 'erase') {
           const new_row = [...this.distance_board[r_index]];
@@ -236,8 +268,8 @@
       >
         <div 
           v-for="(col, c_index) in row"
-          :key="c_index + '- col - ' + r_index + ' - row'"
-          @mouseover="draw(r_index, c_index)"
+          :id="c_index + '_' + r_index"
+          :key="c_index + '_' + r_index"
           draggable="false"
           :class="{ 
             tile: true,
@@ -259,6 +291,12 @@
   margin: 0;
   padding: 0;
   box-sizing: border-box;
+  overflow: hidden;
+  scroll-behavior: none;
+}
+
+body {
+  position: relative;
 }
 
 .panel {
@@ -341,5 +379,27 @@
 .end {
   background-color: red;
 }
+
+@media only screen and (max-width: 600px) {
+  /* Your CSS styles for phones go here */
+
+  .panel {
+    top: 50%;
+    left: 10%;
+    width: 80vw;
+    position: absolute;
+  }
+
+  .container {
+    place-items: start;
+    padding: 10px;
+  }
+
+  .distance_board { 
+    width: 95vw;
+    height: 45vh;
+  }
+}
+
 
 </style>
