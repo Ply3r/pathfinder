@@ -51,6 +51,7 @@
         })
       },
       capturePointerMoviment(event) {
+        event.preventDefault();
         const position = event.type == 'mousemove' ? event : event.touches.item(0) || event.changedTouches.item(0);
         const element = this.getElementFromPosition(position.pageX, position.pageY);
         
