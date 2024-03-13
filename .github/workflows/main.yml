@@ -53,7 +53,7 @@ jobs:
             mkdir -p ~/.ssh
             touch ~/.ssh/id_rsa
             echo "${{ secrets.SSH_KEY }}" >> ~/.ssh/id_rsa
-            echo "${{ secrets.SSH_CONFIG }}" >> ~/.ssh/
+            echo "${{ secrets.SSH_CONFIG }}" >> ~/.ssh/config
             chmod 400 ~/.ssh/id_rsa
 
       - name: Pull Docker image
