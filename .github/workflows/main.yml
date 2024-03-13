@@ -62,6 +62,6 @@ jobs:
             sudo docker stop test-private; 
             sudo docker rm test-private;
             sudo docker pull ply3r/test-private:latest;
-            sudo docker run -p 80:80 ply3r/test-private:latest &
+            sudo docker run -p 80:80 --name test-private ply3r/test-private:latest &
           EOF
       

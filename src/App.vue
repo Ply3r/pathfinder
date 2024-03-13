@@ -54,10 +54,10 @@
         const position = event.type == 'mousemove' ? event : event.touches.item(0) || event.changedTouches.item(0);
         const element = this.getElementFromPosition(position.pageX, position.pageY);
         
-        if(element.className != 'tile') return;
+        if (!element || !element.className.includes('tile')) return;
 
-        const [column, row] = element.id.split('_');
-        this.draw(row, column);
+        const [row, column] = element.id.split('_');
+        this.draw(+row, +column);
       },
       getElementFromPosition(x, y) {
         return document.elementFromPoint(x, y);
@@ -268,8 +268,8 @@
       >
         <div 
           v-for="(col, c_index) in row"
-          :id="c_index + '_' + r_index"
-          :key="c_index + '_' + r_index"
+          :id="r_index + '_' + c_index"
+          :key="r_index + '_' + c_index"
           draggable="false"
           :class="{ 
             tile: true,
