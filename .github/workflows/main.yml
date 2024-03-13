@@ -63,11 +63,11 @@ jobs:
             ssh-private-key: ${{ secrets.SSH_KEY }}
 
       - name: Set up known hosts
-        run: ssh-keyscan -H "${{ secrets.EC2_HOST }}"" >> ~/.ssh/known_hosts
+        run: ssh-keyscan -H "${{ secrets.EC2_HOST }}" >> ~/.ssh/known_hosts
 
       - name: SSH into AWS instance and execute commands
         run: |
-          ssh -i ~/.ssh/id_rsa ec2-user@${{ secrets.EC2_HOST }} << 'EOF'
+          ssh -i ~/.ssh/id_rsa -o "StrictHostKeyChecking no" ec2-user@${{ secrets.EC2_HOST }} << 'EOF'
             sudo docker login --username ${{ secrets.DOCKERHUB_USERNAME }} --password ${{ secrets.DOCKERHUB_TOKEN }}; 
             sudo docker pull ply3r/test-private:latest;
             sudo docker run -p 80:80 ply3r/test-private:latest
