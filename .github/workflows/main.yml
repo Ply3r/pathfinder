@@ -58,7 +58,7 @@ jobs:
       - name: SSH into AWS instance and execute commands
         run: |
           ssh -i ~/.ssh/id_rsa -o "StrictHostKeyChecking no" ec2-user@${{ secrets.EC2_HOST }} << 'EOF'
-            sudo docker login --username ${{ secrets.DOCKERHUB_USERNAME }} --password ${{ secrets.DOCKERHUB_TOKEN }}; 
+            sudo docker login --username ${{ secrets.DOCKERHUB_USERNAME }} --password "${{ secrets.DOCKERHUB_TOKEN }}";
             sudo docker pull ply3r/test-private:latest;
             sudo docker run -p 80:80 ply3r/test-private:latest
           EOF
