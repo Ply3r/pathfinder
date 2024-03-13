@@ -58,13 +58,13 @@ jobs:
 
       - name: Pull Docker image
         run: |
-          ssh ec2-user@${{ secrets.EC2_HOST }} "
+          ssh -o "StrictHostKeyChecking no" ec2-user@${{ secrets.EC2_HOST }} "
           sudo docker login --username ${{ secrets.DOCKERHUB_USERNAME }} --password ${{ secrets.DOCKERHUB_TOKEN }}; 
           sudo docker pull ply3r/test-private:latest;"
       
       - name: Run Image
         run: |
-          ssh ec2-user@${{ secrets.EC2_HOST }} "
+          ssh -o "StrictHostKeyChecking no" ec2-user@${{ secrets.EC2_HOST }} "
           sudo docker login --username ${{ secrets.DOCKERHUB_USERNAME }} --password ${{ secrets.DOCKERHUB_TOKEN }};
           sudo docker run -p 80:80 ply3r/test-private:latest"
 
