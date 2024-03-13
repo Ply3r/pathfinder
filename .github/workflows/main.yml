@@ -52,17 +52,19 @@ jobs:
         run: | 
             mkdir -p ~/.ssh
             touch ~/.ssh/id_rsa
+            chmod 400 ~/.ssh/id_rsa
             echo "${{ secrets.SSH_KEY }}" >> ~/.ssh/id_rsa
+            echo "${{ secrets.SSH_CONFIG }}" >> ~/.ssh/config
 
       - name: Pull Docker image
         run: |
-          ssh -o "StrictHostKeyChecking no" ec2-user@${{ secrets.EC2_HOST }} "
+          ssh ec2-user@${{ secrets.EC2_HOST }} "
           sudo docker login --username ${{ secrets.DOCKERHUB_USERNAME }} --password ${{ secrets.DOCKERHUB_TOKEN }}; 
           sudo docker pull ply3r/test-private:latest;"
       
       - name: Run Image
         run: |
-          ssh -o "StrictHostKeyChecking no" ec2-user@${{ secrets.EC2_HOST }} "
+          ssh ec2-user@${{ secrets.EC2_HOST }} "
           sudo docker login --username ${{ secrets.DOCKERHUB_USERNAME }} --password ${{ secrets.DOCKERHUB_TOKEN }};
           sudo docker run -p 80:80 ply3r/test-private:latest"
 
