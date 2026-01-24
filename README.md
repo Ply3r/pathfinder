@@ -1,6 +1,6 @@
 # Pathfinder
 
-Algoritmo que acha o melhor caminho do ponto A ao ponto B.
+An implementation of the A* (A-star) algorithm to compute the shortest path between two points, using heuristics to optimize search performance.
 
 | :placard: Vitrine.Dev |     |
 | -------------  | --- |
