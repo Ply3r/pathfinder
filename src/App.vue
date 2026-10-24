@@ -16,6 +16,7 @@
         speed: 10, // atraso em ms entre os passos da busca
         maze_size: 25, // sempre impar (o gerador de labirinto exige)
         size_input: 25, // valor do slider enquanto ele e arrastado
+        size_timer: null,
         start_pos: [0, 0],
         end_pos: [null, null],
         walls: [],
@@ -30,6 +31,14 @@
         return this.status === "running";
       }
     },
+    watch: {
+      // O v-slider do Vuetify 3.1 so emite update:modelValue (sem evento de "soltar"),
+      // entao a grade e refeita um instante depois da ultima mudanca do slider.
+      size_input() {
+        clearTimeout(this.size_timer);
+        this.size_timer = setTimeout(this.applySize, 300);
+      }
+    },
     mounted() {
       this.makeMaze();
       window.addEventListener('pointerdown', this.onPointerDown);
@@ -39,6 +48,7 @@
     },
     beforeUnmount() {
       this.run_id += 1; // interrompe uma busca em andamento
+      clearTimeout(this.size_timer);
       window.removeEventListener('pointerdown', this.onPointerDown);
       window.removeEventListener('pointermove', this.onPointerMove);
       window.removeEventListener('pointerup', this.stopDrawing);
@@ -229,32 +239,41 @@
           </v-btn-toggle>
         </v-col>
       </v-row>
-      <v-row>
-        <v-col>
-          <v-slider
-            v-model="size_input"
-            :label="`Grid: ${size_input}x${size_input}`"
-            :disabled="busy"
-            min="11"
-            max="51"
-            step="2"
-            hide-details
-            @end="applySize"
-          ></v-slider>
-        </v-col>
-      </v-row>
-      <v-row>
-        <v-col>
-          <v-slider
-            v-model="speed"
-            :label="`Delay: ${speed} ms`"
-            min="0"
-            max="200"
-            step="5"
-            hide-details
-          ></v-slider>
-        </v-col>
-      </v-row>
+      <div class="slider_field">
+        <div class="slider_header">
+          <span>Grid size</span>
+          <span class="slider_value">{{ size_input }} &times; {{ size_input }}</span>
+        </div>
+        <v-slider
+          v-model="size_input"
+          :disabled="busy"
+          min="11"
+          max="51"
+          step="2"
+          color="primary"
+          track-size="6"
+          thumb-size="20"
+          hide-details
+        ></v-slider>
+        <div class="slider_hint">Changing the size clears the board</div>
+      </div>
+      <div class="slider_field">
+        <div class="slider_header">
+          <span>Delay</span>
+          <span class="slider_value">{{ speed }} ms</span>
+        </div>
+        <v-slider
+          v-model="speed"
+          min="0"
+          max="200"
+          step="5"
+          color="primary"
+          track-size="6"
+          thumb-size="20"
+          hide-details
+        ></v-slider>
+        <div class="slider_hint">Lower is faster</div>
+      </div>
       <v-alert v-if="status === 'found'" class="status" type="success" density="compact">
         Path found: {{ path_length }} steps ({{ visited.size }} tiles searched)
       </v-alert>
@@ -319,6 +338,36 @@ body {
 .panel {
   width: 280px;
   max-width: 100%;
+  padding: 16px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.slider_field {
+  margin-top: 16px;
+}
+
+.slider_header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: rgba(0, 0, 0, 0.8);
+}
+
+.slider_value {
+  padding: 2px 10px;
+  border-radius: 12px;
+  background: white;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.slider_hint {
+  margin-top: -2px;
+  font-size: 0.75rem;
+  color: rgba(0, 0, 0, 0.55);
 }
 
 .distance_board {
