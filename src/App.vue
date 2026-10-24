@@ -1,10 +1,13 @@
 <script>
   import { aStar } from './astar'
+  import { generateMaze } from './maze'
+  import RangeSlider from './components/RangeSlider.vue'
 
   const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
   const key = (r, c) => `${r},${c}`
 
   export default {
+    components: { RangeSlider },
     data() {
       return {
         drawing: false,
@@ -13,7 +16,8 @@
         pencil_type: "draw",
         pencil_value: "wall",
         speed: 10, // atraso em ms entre os passos da busca
-        maze_size: 25,
+        maze_size: 25, // sempre impar (o gerador de labirinto exige)
+        size_input: 25, // valor do slider enquanto ele e arrastado
         start_pos: [0, 0],
         end_pos: [null, null],
         walls: [],
@@ -43,11 +47,23 @@
       window.removeEventListener('pointercancel', this.stopDrawing);
     },
     methods: {
-      makeMaze() {
-        this.walls = Array.from({ length: this.maze_size }, () => new Array(this.maze_size).fill(false));
+      resetBoard(walls) {
+        this.walls = walls;
         this.start_pos = [0, 0];
         this.end_pos = [this.maze_size - 1, this.maze_size - 1];
         this.clearPath();
+      },
+      makeMaze() {
+        this.resetBoard(Array.from({ length: this.maze_size }, () => new Array(this.maze_size).fill(false)));
+      },
+      generateMaze() {
+        if (this.busy) return;
+        this.resetBoard(generateMaze(this.maze_size));
+      },
+      applySize() {
+        if (this.busy || this.size_input === this.maze_size) return;
+        this.maze_size = this.size_input;
+        this.makeMaze();
       },
       clearPath() {
         this.run_id += 1; // cancela qualquer busca em andamento
@@ -171,11 +187,16 @@
         </v-col>
       </v-row>
       <v-row>
-        <v-col md="6">
+        <v-col cols="6">
           <v-btn block :disabled="busy" @click="clearPath">Clear path</v-btn>
         </v-col>
-        <v-col md="6">
+        <v-col cols="6">
           <v-btn block :disabled="busy" @click="makeMaze">Clear maze</v-btn>
+        </v-col>
+      </v-row>
+      <v-row>
+        <v-col>
+          <v-btn block color="teal-darken-2" :disabled="busy" @click="generateMaze">Generate maze</v-btn>
         </v-col>
       </v-row>
       <v-row>
@@ -210,18 +231,26 @@
           </v-btn-toggle>
         </v-col>
       </v-row>
-      <v-row>
-        <v-col>
-          <v-slider
-            v-model="speed"
-            :label="`Delay: ${speed} ms`"
-            min="0"
-            max="200"
-            step="5"
-            hide-details
-          ></v-slider>
-        </v-col>
-      </v-row>
+      <RangeSlider
+        v-model="size_input"
+        label="Grid size"
+        :value-text="`${size_input} × ${size_input}`"
+        hint="clears the board"
+        :min="11"
+        :max="51"
+        :step="2"
+        :disabled="busy"
+        @change="applySize"
+      />
+      <RangeSlider
+        v-model="speed"
+        label="Delay"
+        :value-text="`${speed} ms`"
+        hint="lower is faster"
+        :min="0"
+        :max="200"
+        :step="5"
+      />
       <v-alert v-if="status === 'found'" class="status" type="success" density="compact">
         Path found: {{ path_length }} steps ({{ visited.size }} tiles searched)
       </v-alert>
@@ -229,7 +258,10 @@
         No path found
       </v-alert>
     </div>
-    <div class="distance_board">
+    <div
+      class="distance_board"
+      :style="{ gridTemplateColumns: `repeat(${maze_size}, 1fr)`, gridTemplateRows: `repeat(${maze_size}, 1fr)` }"
+    >
       <div
         v-for="(row, r_index) in walls"
         :key="r_index + '- row'"
@@ -260,36 +292,52 @@
   margin: 0;
   padding: 0;
   box-sizing: border-box;
-  overflow: hidden;
 }
 
 body {
   position: relative;
-}
-
-.panel {
-  top: 10%;
-  left: 5%;
-  width: 20vw;
-  position: absolute;
+  overflow-x: hidden;
 }
 
 .container {
-  width: 100vw;
-  height: 100vh;
-  display: grid;
-  place-items: center;
+  --board-size: min(800px, calc(100vw - 32px), calc(100vh - 32px));
+
+  min-height: 100vh;
+  padding: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
   background-color: rgb(179, 205, 196);
 }
 
+.panel {
+  width: 280px;
+  max-width: 100%;
+  padding: 16px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.55);
+}
+
 .distance_board {
-  width: 800px;
-  height: 800px;
+  width: var(--board-size);
+  height: var(--board-size);
   background: white;
-  border: 5px solid black;
+  border: 4px solid black;
   display: grid;
   touch-action: none;
   user-select: none;
+}
+
+.row {
+  display: contents;
+}
+
+.tile {
+  background-color: white;
+  min-width: 0;
+  min-height: 0;
 }
 
 .status {
@@ -319,15 +367,6 @@ body {
   background-color: red;
 }
 
-.row {
-  display: flex;
-}
-
-.tile {
-  background-color: white;
-  width: 100%;
-}
-
 .search_path {
   background-color: aquamarine;
 }
@@ -352,26 +391,17 @@ body {
   background-color: red;
 }
 
-@media only screen and (max-width: 600px) {
-  /* Your CSS styles for phones go here */
+/* Telas estreitas: tabuleiro em cima ocupando a largura, painel embaixo */
+@media only screen and (max-width: 900px) {
+  .container {
+    --board-size: min(800px, calc(100vw - 32px));
+
+    flex-direction: column-reverse;
+    justify-content: flex-start;
+  }
 
   .panel {
-    top: 50%;
-    left: 10%;
-    width: 80vw;
-    position: absolute;
-  }
-
-  .container {
-    place-items: start;
-    padding: 10px;
-  }
-
-  .distance_board { 
-    width: 95vw;
-    height: 45vh;
+    width: min(480px, 100%);
   }
 }
-
-
 </style>
