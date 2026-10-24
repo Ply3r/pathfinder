@@ -1,212 +1,161 @@
 <script>
+  import { aStar } from './astar'
+
+  const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms))
+  const key = (r, c) => `${r},${c}`
+
   export default {
     data() {
       return {
-        touch_active: false,
-        mouse_active: false,
-        busy: false,
-        found_path: false,
+        drawing: false,
+        status: "idle", // idle | running | found | not_found
+        run_id: 0,
         pencil_type: "draw",
         pencil_value: "wall",
-        speed: 0,
+        speed: 10, // atraso em ms entre os passos da busca
         maze_size: 25,
         start_pos: [0, 0],
         end_pos: [null, null],
-        shortest_path: [],
-        visited_paths: [],
-        distance_board: []
+        walls: [],
+        frontier: new Set(),
+        visited: new Set(),
+        shortest: new Set(),
+        path_length: 0
+      }
+    },
+    computed: {
+      busy() {
+        return this.status === "running";
       }
     },
     mounted() {
       this.makeMaze();
-      this.setMouseEvents();
-      this.setTouchEvents();
+      window.addEventListener('pointerdown', this.onPointerDown);
+      window.addEventListener('pointermove', this.onPointerMove);
+      window.addEventListener('pointerup', this.stopDrawing);
+      window.addEventListener('pointercancel', this.stopDrawing);
+    },
+    beforeUnmount() {
+      this.run_id += 1; // interrompe uma busca em andamento
+      window.removeEventListener('pointerdown', this.onPointerDown);
+      window.removeEventListener('pointermove', this.onPointerMove);
+      window.removeEventListener('pointerup', this.stopDrawing);
+      window.removeEventListener('pointercancel', this.stopDrawing);
     },
     methods: {
-      setTouchEvents() {
-        window.addEventListener('touchstart', () => {
-          this.touch_active = true;
-        })
-
-        window.addEventListener('touchmove', this.capturePointerMoviment)
-
-        window.addEventListener('touchend', () => {
-          this.touch_active = false;
-        })
-
-        window.addEventListener('touchcancel', () => {
-          this.touch_active = false;
-        })
+      makeMaze() {
+        this.walls = Array.from({ length: this.maze_size }, () => new Array(this.maze_size).fill(false));
+        this.start_pos = [0, 0];
+        this.end_pos = [this.maze_size - 1, this.maze_size - 1];
+        this.clearPath();
       },
-      setMouseEvents() {
-        window.addEventListener('mousedown', () => {
-          this.mouse_active = true;
-        })
-
-        window.addEventListener('mousemove', this.capturePointerMoviment)
-
-
-        window.addEventListener('mouseup', () => {
-          this.mouse_active = false;
-        })
+      clearPath() {
+        this.run_id += 1; // cancela qualquer busca em andamento
+        this.status = "idle";
+        this.frontier = new Set();
+        this.visited = new Set();
+        this.shortest = new Set();
+        this.path_length = 0;
       },
-      capturePointerMoviment(event) {
-        event.preventDefault();
-        const position = event.type == 'mousemove' ? event : event.touches.item(0) || event.changedTouches.item(0);
-        const element = this.getElementFromPosition(position.pageX, position.pageY);
-        
-        if (!element || !element.className.includes('tile')) return;
+      tileFromPoint(x, y) {
+        const element = document.elementFromPoint(x, y);
+        if (!element || !element.classList.contains('tile')) return null;
 
         const [row, column] = element.id.split('_');
-        this.draw(+row, +column);
+        return [+row, +column];
       },
-      getElementFromPosition(x, y) {
-        return document.elementFromPoint(x, y);
+      onPointerDown(event) {
+        const tile = this.tileFromPoint(event.clientX, event.clientY);
+        if (!tile) return; // clique fora do tabuleiro (painel, botoes) nao desenha
+
+        this.drawing = true;
+        this.draw(...tile);
       },
-      makeMaze() {
-        const maze = new Array(this.maze_size).fill(new Array(this.maze_size).fill(Infinity));
+      onPointerMove(event) {
+        if (!this.drawing) return;
 
-        const hold_first_row = [...maze[0]];
-        hold_first_row[0] = 0;
-
-        maze[0] = hold_first_row;
-        this.end_pos = [maze.length - 1, maze[0].length - 1];
-        this.distance_board = maze;
-
-        this.clearMaze();
+        const tile = this.tileFromPoint(event.clientX, event.clientY);
+        if (tile) this.draw(...tile);
       },
-      clearMaze() {
-        this.shortest_path = [];
-        this.visited_paths = [];
-        this.distance_board = this.distance_board.map((row) => row.map((col) => col !== null ? Infinity : col))
+      stopDrawing() {
+        this.drawing = false;
       },
       draw(r_index, c_index) {
-        if (!this.mouse_active && !this.touch_active) return;
+        if (this.busy) return;
 
-        if(this.pencil_type === 'erase') {
-          const new_row = [...this.distance_board[r_index]];
-          new_row[c_index] = Infinity;
+        const is_start = r_index === this.start_pos[0] && c_index === this.start_pos[1];
+        const is_end = r_index === this.end_pos[0] && c_index === this.end_pos[1];
 
-          this.distance_board[r_index] = new_row;
+        if (this.pencil_type === 'erase') {
+          this.setWall(r_index, c_index, false);
           return;
         }
 
         if (this.pencil_value === 'wall') {
-          const is_start = r_index === this.start_pos[0] && c_index === this.start_pos[1]
-          const is_end = r_index === this.end_pos[0] && c_index === this.end_pos[1]
           if (is_start || is_end) return;
-
-          const new_row = [...this.distance_board[r_index]];
-          new_row[c_index] = null;
-
-          this.distance_board[r_index] = new_row;
+          this.setWall(r_index, c_index, true);
         }
 
         if (this.pencil_value === 'start') {
+          if (is_end || this.walls[r_index][c_index]) return;
           this.start_pos = [r_index, c_index];
+          this.clearPath();
         }
 
         if (this.pencil_value === 'end') {
+          if (is_start || this.walls[r_index][c_index]) return;
           this.end_pos = [r_index, c_index];
+          this.clearPath();
         }
       },
-      calc_g_cost(next_move, start_pos) {
-        return (Math.abs(next_move[0] - start_pos[0]) * 5) + (Math.abs(next_move[1] - start_pos[1]) * 5 );
+      setWall(r_index, c_index, value) {
+        if (this.walls[r_index][c_index] === value) return;
+
+        const new_row = [...this.walls[r_index]];
+        new_row[c_index] = value;
+        this.walls[r_index] = new_row;
+        this.clearPath(); // o resultado anterior deixou de valer
       },
-      calc_h_cost(next_move, end_pos) {
-        return (Math.abs(next_move[0] - end_pos[0]) * 10) + (Math.abs(next_move[1] - end_pos[1]) * 10 );
-      },
-      mapPossibleMoves(pos, moves) {
-        let new_moves = [
-          [pos[0] - 1, pos[1]],
-          [pos[0] + 1, pos[1]],
-          [pos[0], pos[1] - 1],
-          [pos[0], pos[1] + 1],
-        ];
-        
-        new_moves = new_moves.filter((next_move) => {
-          if ([undefined, null].includes(this.distance_board[next_move[0]])) return false;
-          if ([undefined, null].includes(this.distance_board[next_move[0]][next_move[1]])) return false;
-          return true;
-        })
-
-        new_moves.forEach((next_move) => {
-          const g_cost = this.calc_g_cost(next_move, this.start_pos);
-          const h_cost = this.calc_h_cost(next_move, this.end_pos);
-          const distance = g_cost + h_cost;
-
-          const hold_row = [...this.distance_board[next_move[0]]];
-          hold_row[next_move[1]] = distance;
-
-          this.distance_board[next_move[0]] = hold_row;
-        });
-
-        new_moves = [...moves, ...new_moves].filter((next_move) => !this.visited_paths.includes(next_move.toString()));
-        return new_moves;
-      },
-      sortBestMove(moves, distance_board) {
-        moves.sort((a, b) => {
-          const dist_a = distance_board[a[0]][a[1]];
-          const dist_b = distance_board[b[0]][b[1]];
-
-          if (dist_a === dist_b) return Math.abs(a[0] - a[1]) - Math.abs(b[0] - b[1]);
-          return dist_a - dist_b;
-        })
-      },
-      findShortestPath() {
-        const shortest = [];
-        let visited = [...this.visited_paths];
-        let pos = [...this.end_pos];
-
-
-        while (visited.length) {
-          const moves = [
-            [pos[0] - 1, pos[1]],
-            [pos[0] + 1, pos[1]],
-            [pos[0], pos[1] - 1],
-            [pos[0], pos[1] + 1],
-          ].filter((new_move) => this.visited_paths.includes(new_move.toString()));
-            
-          const [lastIndex] = moves
-            .map((move) => this.visited_paths.findIndex((p) => p === move.toString()))
-            .sort((a, b) => a - b);
-
-          if (lastIndex === -1) break
-
-          shortest.push(pos.toString());
-          pos = this.visited_paths[lastIndex].split(',').map((n) => +n);
-          visited = visited.slice(0, lastIndex);
-        }
-
-        this.shortest_path = [...shortest];
-      },
-      async findPath(possible_moves, pos, end_pos_value) {
-        if (!pos) return;
-        const pos_value = pos.toString();
-
-        if (pos_value === end_pos_value) {
-          this.found_path = true;
-          this.busy = false;
-          this.findShortestPath();
-          throw new Error(true); // break the stack
-        }
-
-        
-        this.visited_paths = [...this.visited_paths, pos_value];
-        possible_moves = this.mapPossibleMoves(pos, possible_moves);
-        this.sortBestMove(possible_moves, this.distance_board);
-
-        setTimeout(() => {
-          this.findPath(possible_moves, possible_moves[0], end_pos_value);
-        }, this.speed);
+      stop() {
+        this.clearPath();
       },
       async start() {
-        const end_pos_value = this.end_pos.toString();
-        let possible_moves = [];
-        this.found_path = false;
-        this.busy = true;
+        if (this.busy) return;
+        this.clearPath();
 
-        this.findPath(possible_moves, this.start_pos, end_pos_value)
+        const run_id = this.run_id;
+        this.status = "running";
+
+        const search = aStar({
+          rows: this.maze_size,
+          cols: this.maze_size,
+          isWall: (r, c) => this.walls[r][c],
+          start: this.start_pos,
+          end: this.end_pos
+        });
+
+        const frontier = new Set();
+        const visited = new Set();
+
+        let step;
+        while (!(step = search.next()).done) {
+          if (run_id !== this.run_id) return; // parou, limpou ou desmontou
+
+          visited.add(key(...step.value.visited));
+          step.value.opened.forEach((cell) => frontier.add(key(...cell)));
+          this.visited = new Set(visited);
+          this.frontier = new Set(frontier);
+
+          if (this.speed > 0) await sleep(this.speed);
+          else await new Promise(requestAnimationFrame);
+        }
+
+        if (run_id !== this.run_id) return;
+
+        const { found, path } = step.value;
+        this.shortest = new Set(path.map((cell) => key(...cell)));
+        this.path_length = Math.max(path.length - 1, 0);
+        this.status = found ? "found" : "not_found";
       }
     }
   }
@@ -217,15 +166,16 @@
     <div class="panel">
       <v-row>
         <v-col>
-          <v-btn block color="success" @click="start">Start</v-btn>
+          <v-btn v-if="!busy" block color="success" @click="start">Start</v-btn>
+          <v-btn v-else block color="error" @click="stop">Stop</v-btn>
         </v-col>
       </v-row>
       <v-row>
         <v-col md="6">
-          <v-btn block @click="clearMaze">Clear path</v-btn>
+          <v-btn block :disabled="busy" @click="clearPath">Clear path</v-btn>
         </v-col>
         <v-col md="6">
-          <v-btn block @click="makeMaze">Clear maze</v-btn>
+          <v-btn block :disabled="busy" @click="makeMaze">Clear maze</v-btn>
         </v-col>
       </v-row>
       <v-row>
@@ -260,24 +210,42 @@
           </v-btn-toggle>
         </v-col>
       </v-row>
+      <v-row>
+        <v-col>
+          <v-slider
+            v-model="speed"
+            :label="`Delay: ${speed} ms`"
+            min="0"
+            max="200"
+            step="5"
+            hide-details
+          ></v-slider>
+        </v-col>
+      </v-row>
+      <v-alert v-if="status === 'found'" class="status" type="success" density="compact">
+        Path found: {{ path_length }} steps ({{ visited.size }} tiles searched)
+      </v-alert>
+      <v-alert v-else-if="status === 'not_found'" class="status" type="warning" density="compact">
+        No path found
+      </v-alert>
     </div>
     <div class="distance_board">
-      <div 
-        v-for="(row, r_index) in distance_board"
+      <div
+        v-for="(row, r_index) in walls"
         :key="r_index + '- row'"
         class="row"
       >
-        <div 
-          v-for="(col, c_index) in row"
+        <div
+          v-for="(wall, c_index) in row"
           :id="r_index + '_' + c_index"
           :key="r_index + '_' + c_index"
           draggable="false"
-          :class="{ 
+          :class="{
             tile: true,
-            wall: col === null, 
-            search_path: col !== Infinity && col !== null,
-            visited_path: visited_paths.includes(`${r_index},${c_index}`), 
-            short_path: shortest_path.includes(`${r_index},${c_index}`),
+            wall: wall,
+            search_path: frontier.has(`${r_index},${c_index}`),
+            visited_path: visited.has(`${r_index},${c_index}`),
+            short_path: shortest.has(`${r_index},${c_index}`),
             start: r_index === start_pos[0] && c_index === start_pos[1],
             end: r_index === end_pos[0] && c_index === end_pos[1],
           }"
@@ -293,7 +261,6 @@
   padding: 0;
   box-sizing: border-box;
   overflow: hidden;
-  scroll-behavior: none;
 }
 
 body {
@@ -321,8 +288,12 @@ body {
   background: white;
   border: 5px solid black;
   display: grid;
-  grid-template-columns: repeat(1fr, 50);
-  grid-template-rows: repeat(1fr, 50);
+  touch-action: none;
+  user-select: none;
+}
+
+.status {
+  margin-top: 16px;
 }
 
 .pencil_active {
