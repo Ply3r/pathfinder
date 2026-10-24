@@ -1,5 +1,5 @@
 <script>
-  import { aStar } from './astar'
+  import { ALGORITHMS, search, solve } from './search'
   import { generateMaze } from './maze'
   import RangeSlider from './components/RangeSlider.vue'
 
@@ -13,6 +13,8 @@
         drawing: false,
         status: "idle", // idle | running | found | not_found
         run_id: 0,
+        algorithm: "astar",
+        results: {}, // por algoritmo: { found, steps, searched } para o tabuleiro atual
         pencil_type: "draw",
         pencil_value: "wall",
         speed: 10, // atraso em ms entre os passos da busca
@@ -30,6 +32,34 @@
     computed: {
       busy() {
         return this.status === "running";
+      },
+      algorithmOptions() {
+        return Object.entries(ALGORITHMS).map(([value, { label }]) => ({ title: label, value }));
+      },
+      algorithmInfo() {
+        return ALGORITHMS[this.algorithm];
+      },
+      // Linhas da tabela de comparacao, na ordem dos algoritmos, so as ja executadas.
+      resultRows() {
+        const found = Object.values(this.results).filter((r) => r.found);
+        const best_steps = Math.min(...found.map((r) => r.steps));
+        const best_searched = Math.min(...found.map((r) => r.searched));
+
+        return Object.entries(ALGORITHMS)
+          .filter(([key]) => this.results[key])
+          .map(([key, { label }]) => {
+            const { found: ok, steps, searched } = this.results[key];
+            return {
+              key,
+              label,
+              found: ok,
+              steps,
+              extra_steps: ok ? steps - best_steps : 0,
+              searched,
+              best_steps: ok && steps === best_steps,
+              best_searched: ok && searched === best_searched
+            };
+          });
       }
     },
     mounted() {
@@ -51,6 +81,7 @@
         this.walls = walls;
         this.start_pos = [0, 0];
         this.end_pos = [this.maze_size - 1, this.maze_size - 1];
+        this.results = {};
         this.clearPath();
       },
       makeMaze() {
@@ -115,12 +146,14 @@
         if (this.pencil_value === 'start') {
           if (is_end || this.walls[r_index][c_index]) return;
           this.start_pos = [r_index, c_index];
+          this.results = {};
           this.clearPath();
         }
 
         if (this.pencil_value === 'end') {
           if (is_start || this.walls[r_index][c_index]) return;
           this.end_pos = [r_index, c_index];
+          this.results = {};
           this.clearPath();
         }
       },
@@ -130,7 +163,32 @@
         const new_row = [...this.walls[r_index]];
         new_row[c_index] = value;
         this.walls[r_index] = new_row;
+        this.results = {};
         this.clearPath(); // o resultado anterior deixou de valer
+      },
+      searchParams() {
+        return {
+          rows: this.maze_size,
+          cols: this.maze_size,
+          isWall: (r, c) => this.walls[r][c],
+          start: this.start_pos,
+          end: this.end_pos
+        };
+      },
+      // Roda todos os algoritmos de uma vez, sem animar, no tabuleiro atual.
+      compare() {
+        if (this.busy) return;
+        this.clearPath();
+
+        const results = {};
+        Object.keys(ALGORITHMS).forEach((key) => {
+          const { found, steps, searched } = solve(key, this.searchParams());
+          results[key] = { found, steps, searched };
+        });
+        this.results = results;
+      },
+      selectAlgorithm(key) {
+        if (!this.busy) this.algorithm = key;
       },
       stop() {
         this.clearPath();
@@ -142,19 +200,13 @@
         const run_id = this.run_id;
         this.status = "running";
 
-        const search = aStar({
-          rows: this.maze_size,
-          cols: this.maze_size,
-          isWall: (r, c) => this.walls[r][c],
-          start: this.start_pos,
-          end: this.end_pos
-        });
+        const run = search(this.algorithm, this.searchParams());
 
         const frontier = new Set();
         const visited = new Set();
 
         let step;
-        while (!(step = search.next()).done) {
+        while (!(step = run.next()).done) {
           if (run_id !== this.run_id) return; // parou, limpou ou desmontou
 
           visited.add(key(...step.value.visited));
@@ -172,6 +224,10 @@
         this.shortest = new Set(path.map((cell) => key(...cell)));
         this.path_length = Math.max(path.length - 1, 0);
         this.status = found ? "found" : "not_found";
+        this.results = {
+          ...this.results,
+          [this.algorithm]: { found, steps: found ? path.length - 1 : null, searched: visited.size }
+        };
       }
     }
   }
@@ -199,6 +255,24 @@
           <v-btn block color="teal-darken-2" :disabled="busy" @click="generateMaze">Generate maze</v-btn>
         </v-col>
       </v-row>
+      <div class="algorithm_field">
+        <v-select
+          v-model="algorithm"
+          :items="algorithmOptions"
+          :disabled="busy"
+          label="Algorithm"
+          density="compact"
+          variant="outlined"
+          hide-details
+        ></v-select>
+        <div class="algorithm_info">
+          <span class="algorithm_badge" :class="algorithmInfo.optimal ? 'badge_optimal' : 'badge_not_optimal'">
+            {{ algorithmInfo.optimal ? "shortest path" : "may not be shortest" }}
+          </span>
+          <span>{{ algorithmInfo.description }}</span>
+        </div>
+        <v-btn block class="mt-3" variant="tonal" :disabled="busy" @click="compare">Compare all</v-btn>
+      </div>
       <v-row>
         <v-col class="my-5 d-flex justify-center">
           <button
@@ -257,6 +331,32 @@
       <v-alert v-else-if="status === 'not_found'" class="status" type="warning" density="compact">
         No path found
       </v-alert>
+      <table v-if="resultRows.length" class="results">
+        <thead>
+          <tr>
+            <th>Algorithm</th>
+            <th>Steps</th>
+            <th>Searched</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr
+            v-for="row in resultRows"
+            :key="row.key"
+            :class="{ results_active: row.key === algorithm }"
+            @click="selectAlgorithm(row.key)"
+          >
+            <td>{{ row.label }}</td>
+            <td :class="{ results_best: row.best_steps }">
+              <template v-if="row.found">
+                {{ row.steps }}<small v-if="row.extra_steps" class="results_worse">+{{ row.extra_steps }}</small>
+              </template>
+              <template v-else>no path</template>
+            </td>
+            <td :class="{ results_best: row.best_searched }">{{ row.searched }}</td>
+          </tr>
+        </tbody>
+      </table>
     </div>
     <div
       class="distance_board"
@@ -313,7 +413,7 @@ body {
 }
 
 .panel {
-  width: 280px;
+  width: 300px;
   max-width: 100%;
   padding: 16px;
   border-radius: 12px;
@@ -342,6 +442,83 @@ body {
 
 .status {
   margin-top: 16px;
+}
+
+.algorithm_field {
+  margin: 20px 0 8px;
+}
+
+.algorithm_info {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+  font-size: 0.75rem;
+  color: rgba(0, 0, 0, 0.6);
+}
+
+.algorithm_badge {
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-weight: 600;
+  color: white;
+}
+
+.badge_optimal {
+  background: rgb(0, 150, 110);
+}
+
+.badge_not_optimal {
+  background: rgb(200, 110, 20);
+}
+
+.results {
+  width: 100%;
+  margin-top: 16px;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.results th {
+  padding: 4px 6px;
+  text-align: left;
+  font-weight: 600;
+  color: rgba(0, 0, 0, 0.6);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.2);
+}
+
+.results td {
+  padding: 5px 6px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+}
+
+.results tbody tr {
+  cursor: pointer;
+}
+
+.results tbody tr:hover {
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.results_active td:first-child {
+  font-weight: 700;
+}
+
+.results_active {
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.results_best {
+  font-weight: 700;
+  color: rgb(0, 120, 85);
+}
+
+.results_worse {
+  margin-left: 4px;
+  color: rgb(200, 110, 20);
+  font-weight: 600;
 }
 
 .pencil_active {
